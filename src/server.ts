@@ -1,6 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
 import { generateVideo } from './videoGenerator';
 
 const app = express();
@@ -35,6 +36,17 @@ const upload = multer({
   },
 });
 
+// Add this cleanup function
+function cleanupUploads(files: string[]) {
+  files.forEach(file => {
+    fs.unlink(file, (err) => {
+      if (err) {
+        console.error(`Error deleting file ${file}:`, err);
+      }
+    });
+  });
+}
+
 app.post('/generate-teaser', upload.array('images', 10), async (req, res) => {
   try {
     if (!req.files || !Array.isArray(req.files)) {
@@ -46,11 +58,19 @@ app.post('/generate-teaser', upload.array('images', 10), async (req, res) => {
     
     await generateVideo(files, outputPath, 3, 0.5);
     
+    // Cleanup uploaded files after video generation
+    cleanupUploads(files);
+    
     res.json({
       success: true,
       videoPath: outputPath
     });
   } catch (error) {
+    // Also cleanup on error
+    if (req.files && Array.isArray(req.files)) {
+      cleanupUploads(req.files.map(file => file.path));
+    }
+    
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     res.status(500).json({
       success: false,
