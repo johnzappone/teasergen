@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Teaser Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .file-inputs {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>Video Teaser Generator</h1>
+    <form id="uploadForm">
+        <div class="file-inputs">
+            <input type="file" name="images" accept=".jpg,.jpeg" required>
+            <input type="file" name="images" accept=".jpg,.jpeg">
+            <input type="file" name="images" accept=".jpg,.jpeg">
+            <input type="file" name="images" accept=".jpg,.jpeg">
+            <input type="file" name="images" accept=".jpg,.jpeg">
+        </div>
+        <button type="submit">Generate Teaser</button>
+    </form>
+    <div id="result"></div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            const fileInputs = document.querySelectorAll('input[type="file"]');
+            const resultDiv = document.getElementById('result');
+            
+            // Clear previous results
+            resultDiv.className = '';
+            resultDiv.textContent = 'Processing...';
+
+            // Add all files to formData
+            fileInputs.forEach(input => {
+                if (input.files[0]) {
+                    formData.append('images', input.files[0]);
+                }
+            });
+
+            try {
+                const response = await fetch('/generate-teaser', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'success';
+                    resultDiv.textContent = `Video generated successfully! Path: ${data.videoPath}`;
+                } else {
+                    resultDiv.className = 'error';
+                    resultDiv.textContent = `Error: ${data.error}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'error';
+                resultDiv.textContent = `Error: ${error.message}`;
+            }
+        });
+    </script>
+</body>
+</html> 

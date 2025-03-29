@@ -6,6 +6,14 @@ import { generateVideo } from './videoGenerator';
 const app = express();
 const port = 3000;
 
+// Add this to serve static files
+app.use(express.static('public'));
+
+// Add the root route handler
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
 // Configure multer for handling file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -43,9 +51,10 @@ app.post('/generate-teaser', upload.array('images', 10), async (req, res) => {
       videoPath: outputPath
     });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     res.status(500).json({
       success: false,
-      error: error.message
+      error: errorMessage
     });
   }
 });
