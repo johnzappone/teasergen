@@ -47,7 +47,13 @@ async function createServer2() {
       const files = req.files.map(file => file.path);
       const outputPath = `output/teaser-${Date.now()}.mp4`;
       
-      await generateVideo(files, outputPath, 3, 2);
+      await generateVideo(
+        files, 
+        outputPath, 
+        3,  // duration
+        2,  // transition duration
+        path.join(process.cwd(), 'music')  // music directory
+      );
       
       // Cleanup uploaded files after video generation
       cleanupUploads(files);

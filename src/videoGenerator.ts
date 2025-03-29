@@ -40,11 +40,28 @@ function getRandomTransition(): string {
   return TRANSITION_EFFECTS[randomIndex];
 }
 
+function getRandomMusic(musicDir: string): string | null {
+  try {
+    const files = fs.readdirSync(musicDir)
+      .filter(file => file.toLowerCase().endsWith('.mp3'));
+    
+    if (files.length === 0) return null;
+    
+    const randomIndex = Math.floor(Math.random() * files.length);
+    console.log("importing music", path.join(musicDir, files[randomIndex]));
+    return path.join(musicDir, files[randomIndex]);
+  } catch (error) {
+    console.error('Error reading music directory:', error);
+    return null;
+  }
+}
+
 export async function generateVideo(
   imagePaths: string[],
   outputPath: string,
   duration: number = 3,
-  transitionDuration: number = 2
+  transitionDuration: number = 2,
+  musicDir: string = 'music'
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const outputDir = path.dirname(outputPath);
@@ -53,8 +70,44 @@ export async function generateVideo(
     }
 
     let command = ffmpeg();
+    let inputIndex = 0;
 
-    // Add each image with extended duration
+    // Calculate total video duration precisely
+    const totalDuration = (imagePaths.length * duration) + 
+      ((imagePaths.length - 1) * transitionDuration);
+    
+    console.log('Video configuration:');
+    console.log(`- Number of images: ${imagePaths.length}`);
+    console.log(`- Duration per image: ${duration} seconds`);
+    console.log(`- Transition duration: ${transitionDuration} seconds`);
+    console.log(`- Total video duration: ${totalDuration} seconds`);
+
+    // Add music if available
+    const musicPath = getRandomMusic(musicDir);
+    let hasAudio = false;
+    if (musicPath) {
+      console.log('Audio configuration:');
+      console.log(`- Audio file: ${musicPath}`);
+      console.log(`- Target audio duration: ${totalDuration} seconds`);
+      
+      command = command
+        .input(musicPath)
+        .inputOptions([
+          '-stream_loop -1'  // Loop audio if needed
+        ])
+        .audioFilters([
+          'volume=0.5'  // Just adjust volume, no fade
+        ])
+        .outputOptions([
+          '-map 0:a',
+          `-t ${totalDuration}`,  // Set exact duration first
+          `-af apad`  // Then pad if needed
+        ]);
+      hasAudio = true;
+      inputIndex++;
+    }
+
+    // Add images
     imagePaths.forEach((imagePath) => {
       command = command
         .input(imagePath)
@@ -66,8 +119,9 @@ export async function generateVideo(
     
     // Scale all inputs to same size and add text
     imagePaths.forEach((_, i) => {
+      const idx = hasAudio ? i + 1 : i;  // Adjust index if we have audio
       filterComplex.push(
-        `[${i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1,setsar=1,` +
+        `[${idx}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1,setsar=1,` +
         `drawtext=text='Image ${i + 1}':fontsize=72:fontcolor=white:` +
         `x=(w-text_w)/2:y=h-th-20:box=1:boxcolor=black@0.5:boxborderw=5[v${i}]`
       );
@@ -97,7 +151,14 @@ export async function generateVideo(
         reject(err);
       })
       .complexFilter(filterComplex.join(';'), [lastOutput])
-      .outputOptions(['-movflags +faststart', '-pix_fmt yuv420p'])
+      .outputOptions([
+        '-movflags +faststart',
+        '-pix_fmt yuv420p',
+        ...(hasAudio ? [
+          '-map 0:a',
+          `-t ${totalDuration}`  // Force duration again in final output
+        ] : [])
+      ])
       .output(outputPath)
       .run();
   });
