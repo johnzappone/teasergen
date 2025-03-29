@@ -54,7 +54,7 @@ export async function generateVideo(
 
     let command = ffmpeg();
 
-    // Add each image with extended duration to account for transitions
+    // Add each image with extended duration
     imagePaths.forEach((imagePath) => {
       command = command
         .input(imagePath)
@@ -64,13 +64,17 @@ export async function generateVideo(
     // Create the complex filter string
     const filterComplex = [];
     
-    // Scale all inputs to same size
+    // Scale all inputs to same size and add text
     imagePaths.forEach((_, i) => {
-      filterComplex.push(`[${i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1,setsar=1[scaled${i}]`);
+      filterComplex.push(
+        `[${i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1,setsar=1,` +
+        `drawtext=text='Image ${i + 1}':fontsize=72:fontcolor=white:` +
+        `x=(w-text_w)/2:y=h-th-20:box=1:boxcolor=black@0.5:boxborderw=5[v${i}]`
+      );
     });
 
     // Create the transition chain
-    let lastOutput = 'scaled0';
+    let lastOutput = 'v0';
     for (let i = 1; i < imagePaths.length; i++) {
       const transitionStart = i * (duration + transitionDuration);
       const transitionEffect = getRandomTransition();
@@ -78,7 +82,7 @@ export async function generateVideo(
       console.log(`Transition ${i}: ${transitionEffect} at ${transitionStart}s`);
       
       filterComplex.push(
-        `[${lastOutput}][scaled${i}]xfade=transition=${transitionEffect}:duration=${transitionDuration}:offset=${transitionStart}[transition${i}]`
+        `[${lastOutput}][v${i}]xfade=transition=${transitionEffect}:duration=${transitionDuration}:offset=${transitionStart}[transition${i}]`
       );
       lastOutput = `transition${i}`;
     }
@@ -93,10 +97,7 @@ export async function generateVideo(
         reject(err);
       })
       .complexFilter(filterComplex.join(';'), [lastOutput])
-      .outputOptions([
-        '-movflags +faststart',
-        '-pix_fmt yuv420p'
-      ])
+      .outputOptions(['-movflags +faststart', '-pix_fmt yuv420p'])
       .output(outputPath)
       .run();
   });
