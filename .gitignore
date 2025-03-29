@@ -5,4 +5,4 @@ uploads/
 package-lock.json
 dist/
 
-.DS_Store
+**/.DS_Store
