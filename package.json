@@ -1,8 +1,9 @@
 {
   "scripts": {
     "dev": "node --loader ts-node/esm src/vite-express.ts",
-    "build": "vue-tsc && vite build",
-    "preview": "vite preview"
+    "build": "vite build",
+    "preview": "vite preview --port 4173",
+    "serve": "node --loader ts-node/esm dist/server.js"
   },
   "name": "teasergen",
   "version": "1.0.0",
