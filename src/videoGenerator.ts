@@ -22,32 +22,29 @@ export async function generateVideo(
 
     let command = ffmpeg();
 
-    // Add each image with duration + transition overlap
+    // Add each image
     imagePaths.forEach((imagePath) => {
       command = command
         .input(imagePath)
-        .inputOptions([
-          '-loop 1',
-          `-t ${duration + transitionDuration}`
-        ]);
+        .inputOptions(['-loop 1', '-t', duration.toString()]);
     });
 
-    // Create the complex filter string with crossfade transitions
+    // Create the complex filter string
     const filterComplex = [];
     
-    // First scale all inputs to same size
+    // Scale all inputs to same size
     imagePaths.forEach((_, i) => {
-      filterComplex.push(`[${i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1,setsar=1[v${i}]`);
+      filterComplex.push(`[${i}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1,setsar=1[scaled${i}]`);
     });
 
-    // Add crossfade transitions
-    let lastOutput = 'v0';
+    // Create the transition chain
+    let lastOutput = 'scaled0';
     for (let i = 1; i < imagePaths.length; i++) {
-      const fadeStart = duration - transitionDuration;
+      const transitionStart = (i * duration) - (transitionDuration / 2);
       filterComplex.push(
-        `[${lastOutput}][v${i}]xfade=transition=fade:duration=${transitionDuration}:offset=${fadeStart}[v${i}out]`
+        `[${lastOutput}][scaled${i}]xfade=transition=fade:duration=${transitionDuration}:offset=${transitionStart},format=yuv420p[transition${i}]`
       );
-      lastOutput = `v${i}out`;
+      lastOutput = `transition${i}`;
     }
 
     command
@@ -61,8 +58,8 @@ export async function generateVideo(
       })
       .complexFilter(filterComplex.join(';'), [lastOutput])
       .outputOptions([
-        '-pix_fmt yuv420p',
-        '-movflags +faststart'
+        '-movflags +faststart',
+        '-pix_fmt yuv420p'
       ])
       .output(outputPath)
       .run();
