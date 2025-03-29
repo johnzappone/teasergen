@@ -56,7 +56,7 @@ app.post('/generate-teaser', upload.array('images', 10), async (req, res) => {
     const files = req.files.map(file => file.path);
     const outputPath = `output/teaser-${Date.now()}.mp4`;
     
-    await generateVideo(files, outputPath, 3, 0.5);
+    await generateVideo(files, outputPath, 3, 2);
     
     // Cleanup uploaded files after video generation
     cleanupUploads(files);
