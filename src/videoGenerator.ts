@@ -38,14 +38,42 @@ const TRANSITION_EFFECTS = [
 
 // Add new constants for Ken Burns effect
 const KEN_BURNS_EFFECTS = [
-  'zoompan=z=1.2:x=0:y=0:d=duration:rot=0.1',
-  'zoompan=z=1.3:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=duration:rot=-0.1',
-  'zoompan=z=1.2:x=iw-iw/zoom:y=0:d=duration:rot=0.05',
-  'zoompan=z=1.2:x=0:y=ih-ih/zoom:d=duration:rot=-0.05',
-  'zoompan=z=1.4:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=duration:rot=0.15',
-  'zoompan=z=1.3:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=duration:rot=-0.15',
-  'zoompan=z=1.2:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=duration:rot=0.2',
-  'zoompan=z=1.3:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=duration:rot=-0.2'
+  // Center zoom out to in
+  'zoompan=z=\'min(zoom+0.002,1.2)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
+  // Center zoom in to out
+  'zoompan=z=\'max(zoom-0.002,0.9)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
+  // Top-left to center
+  'zoompan=z=\'min(zoom+0.002,1.3)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
+  // Bottom-right to center
+  'zoompan=z=\'min(zoom+0.002,1.2)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
+  // Center to top-right
+  'zoompan=z=\'min(zoom+0.002,1.4)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
+  // Center to bottom-left
+  'zoompan=z=\'min(zoom+0.002,1.3)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
+  // Slow zoom out
+  'zoompan=z=\'max(zoom-0.001,0.8)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
+  // Quick zoom in
+  'zoompan=z=\'min(zoom+0.003,1.2)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080'
+];
+
+// Add new constants for color effects
+const COLOR_EFFECTS = [
+  // Warm tone
+  'colorbalance=rs=0.1:gs=0:bs=-0.1',
+  // Cool tone
+  'colorbalance=rs=-0.1:gs=0:bs=0.1',
+  // Vintage look
+  'colorbalance=rs=0.1:gs=0:bs=0.1,curves=preset=vintage',
+  // High contrast
+  'contrast=1.2:brightness=0.1',
+  // Sepia
+  'colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131',
+  // Vibrant
+  'eq=saturation=1.5:contrast=1.1:brightness=0.1',
+  // Faded
+  'eq=saturation=0.7:contrast=0.9:brightness=0.05',
+  // No effect (normal)
+  'null'
 ];
 
 function getRandomTransition(): string {
@@ -74,6 +102,11 @@ function getRandomMusic(musicDir: string): string | null {
   }
 }
 
+function getRandomColorEffect(): string {
+  const randomIndex = Math.floor(Math.random() * COLOR_EFFECTS.length);
+  return COLOR_EFFECTS[randomIndex];
+}
+
 export async function generateVideo(
   imagePaths: string[],
   outputPath: string,
@@ -88,6 +121,23 @@ export async function generateVideo(
   } = {}
 ): Promise<void> {
   return new Promise(async (resolve, reject) => {
+    // Create logs directory if it doesn't exist
+    const logsDir = path.join('logs');
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+
+    // Create a log file with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const logFile = path.join(logsDir, `ffmpeg-${timestamp}.log`);
+    const logStream = fs.createWriteStream(logFile);
+
+    // Function to log to both console and file
+    const log = (message: string) => {
+      console.log(message);
+      logStream.write(message + '\n');
+    };
+
     const outputDir = path.dirname(outputPath);
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
@@ -161,9 +211,12 @@ export async function generateVideo(
       const idx = hasAudio ? i + 1 : i;  // Adjust index if we have audio
       let filter = `[${idx}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1`;
       
+      // Add random color effect
+      filter += `,${getRandomColorEffect()}`;
+      
       // Add Ken Burns effect if enabled
       if (options.kenBurnsEnabled !== false) {
-        filter += `,zoompan=z='min(zoom+0.002,1.2)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${duration + transitionDuration * 2}:s=1920x1080`;
+        filter += `,${getRandomKenBurns(duration + transitionDuration * 2)}`;
       }
       
       if (options.imageTextEnabled !== false) {
@@ -207,15 +260,21 @@ export async function generateVideo(
 
     command
       .on('end', () => {
-        console.log('Video generation completed');
+        log('Video generation completed');
+        logStream.end();
         resolve();
       })
       .on('error', (err) => {
-        console.error('Error:', err);
+        log(`Error: ${err.message}`);
+        log(`Stack: ${err.stack}`);
+        logStream.end();
         reject(err);
       })
       .on('start', (commandLine) => {
-        console.log('Spawned Ffmpeg with command: ' + commandLine);
+        log('Spawned Ffmpeg with command: ' + commandLine);
+      })
+      .on('stderr', (stderrLine) => {
+        log(`FFmpeg: ${stderrLine}`);
       })
       .complexFilter(filterComplex.join(';'), [lastOutput])
       .outputOptions([
