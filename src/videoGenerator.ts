@@ -221,12 +221,16 @@ export async function generateVideo(
         const maxZoom = 1.05 + Math.random() * 0.05; // Random max zoom between 1.05 and 1.1
         const rotationSpeed = 0.05 + Math.random() * 0.1; // Random speed between 0.05 and 0.15
         const maxRotation = 0.02 + Math.random() * 0.03; // Random max rotation between 0.02 and 0.05
+        const rotationDirection = i % 2 === 0 ? 1 : -1; // Alternate between clockwise (1) and counterclockwise (-1)
 
         // Apply zoompan with random speed
         filter += `,zoompan=z='min(zoom+${zoomSpeed},${maxZoom})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${duration + transitionDuration * 2}:s=1920x1080:fps=30`;
-        // Add smooth rotation with random speed
-        filter += `,rotate='min((t-${i * (duration + transitionDuration)})*${rotationSpeed},${maxRotation})':c=black@0:ow=1920:oh=1080`;
+        // Add smooth rotation with random speed and alternating direction
+        filter += `,rotate='min((t-${i * (duration + transitionDuration)})*${rotationSpeed}*${rotationDirection},${maxRotation})':c=black@0:ow=1920:oh=1080`;
       }
+      
+      // Add blur effect that fades in and out
+      filter += `,fade=t=in:st=0:d=0.5,fade=t=out:st=${duration-1}:d=0.5`;
       
       // Add text overlay if enabled
       if (options.imageTextEnabled !== false) {

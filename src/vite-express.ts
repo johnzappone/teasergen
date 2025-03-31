@@ -17,14 +17,22 @@ async function createServer2() {
   // Add JSON body parser middleware
   app.use(express.json());
 
-  // Serve static files first
-  app.use('/output', express.static('output'));
+  // Serve static files from uploads directory
   app.use('/uploads', express.static('uploads'));
+
+  // Serve static files from output directory for generated videos
+  app.use('/output', express.static('output'));
 
   // Configure multer for file uploads
   const uploadDir = path.join(process.cwd(), 'uploads');
   if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir);
+  }
+
+  // Create output directory if it doesn't exist
+  const outputDir = path.join(process.cwd(), 'output');
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir);
   }
 
   const storage = multer.diskStorage({
@@ -167,7 +175,7 @@ async function createServer2() {
 
       res.json({
         success: true,
-        videoPath: outputPath
+        videoUrl: `/${outputPath}`
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';

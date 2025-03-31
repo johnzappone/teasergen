@@ -75,8 +75,8 @@
                   </div>
                 </div>
 
-                <!-- Continue to Video Generation -->
-                <div class="flex flex-col items-center space-y-4 mt-8">
+                <!-- Video Generation Section -->
+                <div v-if="!videoGenerated" class="flex flex-col items-center space-y-4 mt-8">
                   <label class="flex items-center space-x-2 mb-4">
                     <input
                       type="checkbox"
@@ -93,6 +93,36 @@
                   >
                     {{ generating ? 'Generating Video...' : 'Generate Video' }}
                   </button>
+                </div>
+
+                <!-- Generated Video Section -->
+                <div v-if="videoGenerated" class="flex flex-col items-center space-y-4 mt-8">
+                  <h2 class="text-2xl font-bold text-center">Generated Video</h2>
+                  <video 
+                    :src="videoUrl" 
+                    controls 
+                    class="w-full max-w-3xl rounded-lg shadow-lg"
+                    autoplay
+                    loop
+                    muted
+                    playsinline
+                  ></video>
+                  <div class="flex space-x-4">
+                    <button
+                      @click="downloadVideo"
+                      class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-full
+                             transition duration-300 ease-in-out transform hover:scale-105"
+                    >
+                      Download Video
+                    </button>
+                    <button
+                      @click="restartProcess"
+                      class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded-full
+                             transition duration-300 ease-in-out transform hover:scale-105"
+                    >
+                      Create New Video
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -114,6 +144,8 @@ const generating = ref(false);
 const processingComplete = ref(false);
 const generateVideo = ref(false);
 const kenBurnsEnabled = ref(true);
+const videoGenerated = ref(false);
+const videoUrl = ref<string>('');
 const processedImages = ref<Array<{
   original: string;
   resized: string;
@@ -203,9 +235,9 @@ async function startVideoGeneration() {
     
     const result = await response.json();
     
-    if (result.success) {
-      alert('Video generated successfully!');
-      // Handle video download or preview if needed
+    if (result.success && result.videoUrl) {
+      videoUrl.value = result.videoUrl.startsWith('/') ? result.videoUrl : `/${result.videoUrl}`;
+      videoGenerated.value = true;
     } else {
       throw new Error(result.error || 'Video generation failed');
     }
@@ -215,5 +247,28 @@ async function startVideoGeneration() {
   } finally {
     generating.value = false;
   }
+}
+
+function downloadVideo() {
+  const link = document.createElement('a');
+  link.href = videoUrl.value;
+  link.download = 'generated-video.mp4';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function restartProcess() {
+  // Reset all state
+  files.value = [null];
+  fileNames.value = [];
+  processing.value = false;
+  generating.value = false;
+  processingComplete.value = false;
+  generateVideo.value = false;
+  kenBurnsEnabled.value = true;
+  videoGenerated.value = false;
+  videoUrl.value = '';
+  processedImages.value = [];
 }
 </script> 
