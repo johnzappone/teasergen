@@ -77,6 +77,14 @@
 
                 <!-- Continue to Video Generation -->
                 <div class="flex flex-col items-center space-y-4 mt-8">
+                  <label class="flex items-center space-x-2 mb-4">
+                    <input
+                      type="checkbox"
+                      v-model="kenBurnsEnabled"
+                      class="form-checkbox h-4 w-4 text-blue-600"
+                    />
+                    <span>Enable Ken Burns Effect</span>
+                  </label>
                   <button
                     @click="startVideoGeneration"
                     class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-full
@@ -105,6 +113,7 @@ const processing = ref(false);
 const generating = ref(false);
 const processingComplete = ref(false);
 const generateVideo = ref(false);
+const kenBurnsEnabled = ref(true);
 const processedImages = ref<Array<{
   original: string;
   resized: string;
@@ -187,7 +196,8 @@ async function startVideoGeneration() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        images: processedImages.value.map(img => img.resized)
+        images: processedImages.value.map(img => img.resized),
+        kenBurnsEnabled: kenBurnsEnabled.value
       }),
     });
     

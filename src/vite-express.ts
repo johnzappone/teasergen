@@ -126,7 +126,7 @@ async function createServer2() {
   // Separate endpoint for video generation
   app.post('/generate-video', async (req, res) => {
     try {
-      const { images } = req.body;
+      const { images, kenBurnsEnabled } = req.body;
       
       if (!images || !Array.isArray(images) || images.length === 0) {
         throw new Error('No images provided');
@@ -144,7 +144,8 @@ async function createServer2() {
         outputPath,
         3,
         2,
-        path.join(process.cwd(), 'music')
+        path.join(process.cwd(), 'music'),
+        { kenBurnsEnabled }
       );
 
       res.json({

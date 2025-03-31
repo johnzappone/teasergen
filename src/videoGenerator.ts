@@ -38,10 +38,14 @@ const TRANSITION_EFFECTS = [
 
 // Add new constants for Ken Burns effect
 const KEN_BURNS_EFFECTS = [
-  'zoompan=z=1.1:x=0:y=0:d=duration',
-  'zoompan=z=1.2:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=duration',
-  'zoompan=z=1.1:x=iw-iw/zoom:y=0:d=duration',
-  'zoompan=z=1.1:x=0:y=ih-ih/zoom:d=duration'
+  'zoompan=z=1.2:x=0:y=0:d=duration:rot=0.1',
+  'zoompan=z=1.3:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=duration:rot=-0.1',
+  'zoompan=z=1.2:x=iw-iw/zoom:y=0:d=duration:rot=0.05',
+  'zoompan=z=1.2:x=0:y=ih-ih/zoom:d=duration:rot=-0.05',
+  'zoompan=z=1.4:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=duration:rot=0.15',
+  'zoompan=z=1.3:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=duration:rot=-0.15',
+  'zoompan=z=1.2:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=duration:rot=0.2',
+  'zoompan=z=1.3:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=duration:rot=-0.2'
 ];
 
 function getRandomTransition(): string {
@@ -155,19 +159,16 @@ export async function generateVideo(
     // Scale and apply effects to all inputs
     resizedImagePaths.forEach((_, i) => {
       const idx = hasAudio ? i + 1 : i;  // Adjust index if we have audio
-      let filter = `[${idx}:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080`;
+      let filter = `[${idx}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1`;
       
       // Add Ken Burns effect if enabled
       if (options.kenBurnsEnabled !== false) {
-        filter += `,${getRandomKenBurns(duration + transitionDuration * 2)}`;
+        filter += `,zoompan=z='min(zoom+0.002,1.2)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${duration + transitionDuration * 2}:s=1920x1080`;
       }
-
-      // Add setsar and text if enabled
-      filter += ',setsar=1';
       
       if (options.imageTextEnabled !== false) {
         filter += `,drawtext=text='Image ${i + 1}':` +
-          'fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:' +
+          'fontfile=/System/Library/Fonts/Arial.ttc:' +
           'fontsize=52:fontcolor=white:' +
           'x=(w-text_w)/2:y=h-th-40:' +
           'box=1:boxcolor=black@0.5:boxborderw=5:' +
@@ -183,7 +184,7 @@ export async function generateVideo(
       filterComplex.push(
         `color=c=black@0:s=1920x1080:d=3[bg];` +
         `[bg]drawtext=text='${options.title}':` +
-        'fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:' +
+        'fontfile=/System/Library/Fonts/Arial.ttc:' +
         'fontsize=72:fontcolor=white:' +
         'x=(w-text_w)/2:y=(h-text_h)/2:' +
         'fade=in:0:30:alpha=1,fade=out:150:30:alpha=1[title]'
@@ -220,6 +221,8 @@ export async function generateVideo(
       .outputOptions([
         '-movflags +faststart',
         '-pix_fmt yuv420p',
+        '-loglevel debug',
+        '-stats',
         ...(hasAudio ? [
           '-map 0:a',
           `-t ${totalDuration}`  // Force duration again in final output
