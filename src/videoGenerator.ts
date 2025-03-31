@@ -2,6 +2,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import * as fs from 'fs';
 import path from 'path';
 import ffmpegStatic from 'ffmpeg-static';
+import sharp from 'sharp';
 
 if (!ffmpegStatic) {
   throw new Error('ffmpeg-static path not found');
@@ -35,9 +36,22 @@ const TRANSITION_EFFECTS = [
   'diagtr'
 ];
 
+// Add new constants for Ken Burns effect
+const KEN_BURNS_EFFECTS = [
+  'zoompan=z=1.1:x=0:y=0:d=duration',
+  'zoompan=z=1.2:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2):d=duration',
+  'zoompan=z=1.1:x=iw-iw/zoom:y=0:d=duration',
+  'zoompan=z=1.1:x=0:y=ih-ih/zoom:d=duration'
+];
+
 function getRandomTransition(): string {
   const randomIndex = Math.floor(Math.random() * TRANSITION_EFFECTS.length);
   return TRANSITION_EFFECTS[randomIndex];
+}
+
+function getRandomKenBurns(duration: number): string {
+  const randomIndex = Math.floor(Math.random() * KEN_BURNS_EFFECTS.length);
+  return KEN_BURNS_EFFECTS[randomIndex].replace('duration', duration.toString());
 }
 
 function getRandomMusic(musicDir: string): string | null {
@@ -61,23 +75,44 @@ export async function generateVideo(
   outputPath: string,
   duration: number = 3,
   transitionDuration: number = 2,
-  musicDir: string = 'music'
+  musicDir: string = 'music',
+  options: {
+    title?: string,
+    titleFont?: string,
+    imageTextEnabled?: boolean,
+    kenBurnsEnabled?: boolean
+  } = {}
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     const outputDir = path.dirname(outputPath);
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
+    // Create a subdirectory for resized images
+    const resizedDir = path.join('uploads', 'resized');
+    if (!fs.existsSync(resizedDir)) {
+      fs.mkdirSync(resizedDir, { recursive: true });
+    }
+
+    // Resize images to 50% and save them to the resized directory
+    const resizedImagePaths = await Promise.all(imagePaths.map(async (imagePath, index) => {
+      const resizedImagePath = path.join(resizedDir, `resized-${index}.jpg`);
+      await sharp(imagePath)
+        .resize({ width: Math.floor(await sharp(imagePath).metadata().then(meta => meta.width! / 2)) })
+        .toFile(resizedImagePath);
+      return resizedImagePath;
+    }));
+
     let command = ffmpeg();
     let inputIndex = 0;
 
     // Calculate total video duration precisely
-    const totalDuration = (imagePaths.length * duration) + 
-      ((imagePaths.length - 1) * transitionDuration);
+    const totalDuration = (resizedImagePaths.length * duration) + 
+      ((resizedImagePaths.length - 1) * transitionDuration);
     
     console.log('Video configuration:');
-    console.log(`- Number of images: ${imagePaths.length}`);
+    console.log(`- Number of images: ${resizedImagePaths.length}`);
     console.log(`- Duration per image: ${duration} seconds`);
     console.log(`- Transition duration: ${transitionDuration} seconds`);
     console.log(`- Total video duration: ${totalDuration} seconds`);
@@ -92,23 +127,23 @@ export async function generateVideo(
       
       command = command
         .input(musicPath)
-        .inputOptions([
-          '-stream_loop -1'  // Loop audio if needed
-        ])
+        .inputOptions(['-stream_loop -1'])
         .audioFilters([
-          'volume=0.5'  // Just adjust volume, no fade
+          `volume=0.5,` +
+          `afade=t=in:st=0:d=2,` +  // Fade in first 2 seconds
+          `afade=t=out:st=${totalDuration-2}:d=2`  // Fade out last 2 seconds
         ])
         .outputOptions([
           '-map 0:a',
-          `-t ${totalDuration}`,  // Set exact duration first
-          `-af apad`  // Then pad if needed
+          `-t ${totalDuration}`,
+          `-af apad`
         ]);
       hasAudio = true;
       inputIndex++;
     }
 
-    // Add images
-    imagePaths.forEach((imagePath) => {
+    // Add resized images with Ken Burns effect
+    resizedImagePaths.forEach((imagePath) => {
       command = command
         .input(imagePath)
         .inputOptions(['-loop 1', '-t', (duration + transitionDuration * 2).toString()]);
@@ -117,19 +152,47 @@ export async function generateVideo(
     // Create the complex filter string
     const filterComplex = [];
     
-    // Scale all inputs to same size and add text
-    imagePaths.forEach((_, i) => {
+    // Scale and apply effects to all inputs
+    resizedImagePaths.forEach((_, i) => {
       const idx = hasAudio ? i + 1 : i;  // Adjust index if we have audio
-      filterComplex.push(
-        `[${idx}:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1,setsar=1,` +
-        `drawtext=text='Image ${i + 1}':fontsize=72:fontcolor=white:` +
-        `x=(w-text_w)/2:y=h-th-20:box=1:boxcolor=black@0.5:boxborderw=5[v${i}]`
-      );
+      let filter = `[${idx}:v]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080`;
+      
+      // Add Ken Burns effect if enabled
+      if (options.kenBurnsEnabled !== false) {
+        filter += `,${getRandomKenBurns(duration + transitionDuration * 2)}`;
+      }
+
+      // Add setsar and text if enabled
+      filter += ',setsar=1';
+      
+      if (options.imageTextEnabled !== false) {
+        filter += `,drawtext=text='Image ${i + 1}':` +
+          'fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:' +
+          'fontsize=52:fontcolor=white:' +
+          'x=(w-text_w)/2:y=h-th-40:' +
+          'box=1:boxcolor=black@0.5:boxborderw=5:' +
+          `enable='between(t,0.5,${duration - 0.5})'`; // Animate text in/out
+      }
+      
+      filter += `[v${i}]`;
+      filterComplex.push(filter);
     });
+
+    // Add title if provided
+    if (options.title) {
+      filterComplex.push(
+        `color=c=black@0:s=1920x1080:d=3[bg];` +
+        `[bg]drawtext=text='${options.title}':` +
+        'fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:' +
+        'fontsize=72:fontcolor=white:' +
+        'x=(w-text_w)/2:y=(h-text_h)/2:' +
+        'fade=in:0:30:alpha=1,fade=out:150:30:alpha=1[title]'
+      );
+    }
 
     // Create the transition chain
     let lastOutput = 'v0';
-    for (let i = 1; i < imagePaths.length; i++) {
+    for (let i = 1; i < resizedImagePaths.length; i++) {
       const transitionStart = i * (duration + transitionDuration);
       const transitionEffect = getRandomTransition();
       
@@ -149,6 +212,9 @@ export async function generateVideo(
       .on('error', (err) => {
         console.error('Error:', err);
         reject(err);
+      })
+      .on('start', (commandLine) => {
+        console.log('Spawned Ffmpeg with command: ' + commandLine);
       })
       .complexFilter(filterComplex.join(';'), [lastOutput])
       .outputOptions([
