@@ -5,5 +5,6 @@ uploads/
 package-lock.json
 dist/
 testimgs/
+logs/
 
 **/.DS_Store

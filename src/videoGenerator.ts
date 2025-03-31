@@ -39,33 +39,33 @@ const TRANSITION_EFFECTS = [
 // Add new constants for Ken Burns effect
 const KEN_BURNS_EFFECTS = [
   // Center zoom out to in
-  'zoompan=z=\'min(zoom+0.002,1.2)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
+  'zoompan=z=min(zoom+0.002,1.2):x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
   // Center zoom in to out
-  'zoompan=z=\'max(zoom-0.002,0.9)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
+  'zoompan=z=max(zoom-0.002,0.9):x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
   // Top-left to center
-  'zoompan=z=\'min(zoom+0.002,1.3)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
+  'zoompan=z=min(zoom+0.002,1.3):x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
   // Bottom-right to center
-  'zoompan=z=\'min(zoom+0.002,1.2)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
+  'zoompan=z=min(zoom+0.002,1.2):x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
   // Center to top-right
-  'zoompan=z=\'min(zoom+0.002,1.4)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
+  'zoompan=z=min(zoom+0.002,1.4):x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
   // Center to bottom-left
-  'zoompan=z=\'min(zoom+0.002,1.3)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
+  'zoompan=z=min(zoom+0.002,1.3):x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
   // Slow zoom out
-  'zoompan=z=\'max(zoom-0.001,0.8)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
+  'zoompan=z=max(zoom-0.001,0.8):x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080',
   // Quick zoom in
-  'zoompan=z=\'min(zoom+0.003,1.2)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080'
+  'zoompan=z=min(zoom+0.003,1.2):x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d=duration:s=1920x1080'
 ];
 
 // Add new constants for color effects
 const COLOR_EFFECTS = [
   // Warm tone
-  'colorbalance=rs=0.1:gs=0:bs=-0.1',
+  'eq=gamma_r=1.1:gamma_g=1.0:gamma_b=0.9',
   // Cool tone
-  'colorbalance=rs=-0.1:gs=0:bs=0.1',
+  'eq=gamma_r=0.9:gamma_g=1.0:gamma_b=1.1',
   // Vintage look
-  'colorbalance=rs=0.1:gs=0:bs=0.1,curves=preset=vintage',
+  'eq=gamma_r=1.1:gamma_g=1.1:gamma_b=1.1:saturation=0.8',
   // High contrast
-  'contrast=1.2:brightness=0.1',
+  'eq=contrast=1.2:brightness=0.1:saturation=1.1',
   // Sepia
   'colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131',
   // Vibrant
@@ -216,33 +216,22 @@ export async function generateVideo(
       
       // Add Ken Burns effect if enabled
       if (options.kenBurnsEnabled !== false) {
-        filter += `,${getRandomKenBurns(duration + transitionDuration * 2)}`;
+        // Apply zoompan with proper syntax for zoom
+        filter += `,zoompan=z='min(zoom+0.0005,1.1)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${duration + transitionDuration * 2}:s=1920x1080:fps=30`;
+        // Add smooth rotation per image while maintaining dimensions
+        filter += `,rotate='min((t-${i * (duration + transitionDuration)})*0.1,0.05)':c=black@0:ow=1920:oh=1080`;
       }
       
+      // Add text overlay if enabled
       if (options.imageTextEnabled !== false) {
-        filter += `,drawtext=text='Image ${i + 1}':` +
-          'fontfile=/System/Library/Fonts/Arial.ttc:' +
-          'fontsize=52:fontcolor=white:' +
-          'x=(w-text_w)/2:y=h-th-40:' +
-          'box=1:boxcolor=black@0.5:boxborderw=5:' +
-          `enable='between(t,0.5,${duration - 0.5})'`; // Animate text in/out
+        const text = options.title || `Image ${i + 1}`;
+        const fontPath = options.titleFont || '/System/Library/Fonts/Arial.ttc';
+        filter += `,drawtext=text='${text}':fontfile='${fontPath}':fontsize=72:fontcolor=white:shadowcolor=black@0.5:shadowx=2:shadowy=2:x=(w-text_w)/2:y=h-th-50:alpha='if(lt(t,1),0,if(lt(t,2),t-1,if(lt(t,${duration-1}),1,if(lt(t,${duration}),${duration}-t,0))))'`;
       }
       
       filter += `[v${i}]`;
       filterComplex.push(filter);
     });
-
-    // Add title if provided
-    if (options.title) {
-      filterComplex.push(
-        `color=c=black@0:s=1920x1080:d=3[bg];` +
-        `[bg]drawtext=text='${options.title}':` +
-        'fontfile=/System/Library/Fonts/Arial.ttc:' +
-        'fontsize=72:fontcolor=white:' +
-        'x=(w-text_w)/2:y=(h-text_h)/2:' +
-        'fade=in:0:30:alpha=1,fade=out:150:30:alpha=1[title]'
-      );
-    }
 
     // Create the transition chain
     let lastOutput = 'v0';
@@ -257,6 +246,9 @@ export async function generateVideo(
       );
       lastOutput = `transition${i}`;
     }
+
+    // Add the final output label
+    filterComplex.push(`[${lastOutput}]setpts=PTS-STARTPTS[outv]`);
 
     command
       .on('end', () => {
@@ -276,7 +268,7 @@ export async function generateVideo(
       .on('stderr', (stderrLine) => {
         log(`FFmpeg: ${stderrLine}`);
       })
-      .complexFilter(filterComplex.join(';'), [lastOutput])
+      .complexFilter(filterComplex, ['outv'])
       .outputOptions([
         '-movflags +faststart',
         '-pix_fmt yuv420p',
