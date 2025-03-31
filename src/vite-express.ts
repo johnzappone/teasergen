@@ -6,6 +6,7 @@ import fs from 'fs';
 import { generateVideo } from './videoGenerator.js';
 import { fileURLToPath } from 'url';
 import { processImage, ProcessedImage } from './imageProcessor.js';
+import sharp from 'sharp';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -20,105 +21,121 @@ async function createServer2() {
   app.use('/output', express.static('output'));
   app.use('/uploads', express.static('uploads'));
 
-  // Configure multer and API routes before Vite middleware
+  // Configure multer for file uploads
+  const uploadDir = path.join(process.cwd(), 'uploads');
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+  }
+
   const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-      cb(null, 'uploads/');
+      cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
-      cb(null, `${Date.now()}-${file.originalname}`);
-    },
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
   });
 
-  const upload = multer({
-    storage,
+  const upload = multer({ 
+    storage: storage,
     fileFilter: (req, file, cb) => {
-      if (file.mimetype.startsWith('image/jpeg')) {
+      // Accept only jpg, jpeg, and png files
+      if (file.mimetype === 'image/jpeg' || file.mimetype === 'image/png') {
         cb(null, true);
       } else {
-        cb(new Error('Only JPG files are allowed'));
+        cb(new Error('Only .jpg, .jpeg, and .png files are allowed'));
       }
-    },
+    }
   });
 
   // API routes
-  app.post('/process-images', upload.array('images', 10), async (req, res) => {
-    const uploadedFiles: string[] = [];
-    const resizedFiles: string[] = [];
-
+  app.post('/process-images', upload.array('images'), async (req, res) => {
     try {
       if (!req.files || !Array.isArray(req.files)) {
         throw new Error('No files uploaded');
       }
 
-      const files = req.files.map(file => file.path);
-      uploadedFiles.push(...files);
-      
-      const generateVideoOption = req.body.generateVideo === 'true';
+      const processedImages = await Promise.all(
+        (req.files as Express.Multer.File[]).map(async (file) => {
+          const originalPath = file.path;
+          const resizedPath = path.join(uploadDir, `resized_${file.filename}`);
+          
+          // Get original image dimensions
+          const originalMetadata = await sharp(originalPath).metadata();
+          const originalWidth = originalMetadata.width || 0;
+          const originalHeight = originalMetadata.height || 0;
+          
+          // Calculate new dimensions maintaining aspect ratio
+          const maxWidth = 1920;
+          const maxHeight = 1080;
+          const aspectRatio = originalWidth / originalHeight;
+          
+          let newWidth = originalWidth;
+          let newHeight = originalHeight;
+          
+          if (originalWidth > maxWidth || originalHeight > maxHeight) {
+            if (aspectRatio > 1) {
+              // Landscape
+              newWidth = maxWidth;
+              newHeight = Math.round(maxWidth / aspectRatio);
+              if (newHeight > maxHeight) {
+                newHeight = maxHeight;
+                newWidth = Math.round(maxHeight * aspectRatio);
+              }
+            } else {
+              // Portrait
+              newHeight = maxHeight;
+              newWidth = Math.round(maxHeight * aspectRatio);
+              if (newWidth > maxWidth) {
+                newWidth = maxWidth;
+                newHeight = Math.round(maxWidth / aspectRatio);
+              }
+            }
+          }
 
-      // Process images one at a time to better handle errors
-      const processedImages: ProcessedImage[] = [];
-      for (let i = 0; i < files.length; i++) {
-        try {
-          const processed = await processImage(files[i], 'uploads', i);
-          processedImages.push(processed);
-          resizedFiles.push(processed.resizedUrl);
-        } catch (error) {
-          console.error(`Error processing image ${i}:`, error);
-          throw new Error(`Failed to process image ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
-      }
+          // Process image based on file type
+          const isPNG = file.mimetype === 'image/png';
+          const sharpInstance = sharp(originalPath)
+            .resize(newWidth, newHeight, {
+              fit: 'inside',
+              withoutEnlargement: true
+            });
 
-      let videoPath: string | undefined;
+          if (isPNG) {
+            // For PNG, preserve transparency and optimize
+            await sharpInstance
+              .png({ quality: 90, compressionLevel: 9 })
+              .toFile(resizedPath);
+          } else {
+            // For JPG, convert to RGB and optimize
+            await sharpInstance
+              .jpeg({ quality: 90, mozjpeg: true })
+              .toFile(resizedPath);
+          }
 
-      // Generate video if requested
-      if (generateVideoOption && processedImages.length > 0) {
-        try {
-          const outputPath = `output/teaser-${Date.now()}.mp4`;
-          await generateVideo(
-            processedImages.map(img => path.join('uploads', path.basename(img.resizedUrl))),
-            outputPath,
-            3,
-            2,
-            path.join(process.cwd(), 'music')
-          );
-          videoPath = outputPath;
-        } catch (error) {
-          console.error('Video generation failed:', error);
-          // Continue with image processing results even if video fails
-        }
-      }
+          // Get processed image size
+          const stats = await fs.promises.stat(resizedPath);
+          
+          return {
+            originalUrl: `/uploads/${file.filename}`,
+            resizedUrl: `/uploads/resized_${file.filename}`,
+            originalSize: stats.size,
+            resizedSize: stats.size,
+            dimensions: {
+              width: newWidth,
+              height: newHeight
+            }
+          };
+        })
+      );
 
-      res.json({
-        success: true,
-        images: processedImages,
-        videoPath
-      });
+      res.json({ success: true, images: processedImages });
     } catch (error) {
-      // Cleanup on error
-      try {
-        // Clean up uploaded original files
-        uploadedFiles.forEach(file => {
-          if (fs.existsSync(file)) {
-            fs.unlinkSync(file);
-          }
-        });
-
-        // Clean up any resized files
-        resizedFiles.forEach(resizedUrl => {
-          const resizedPath = path.join(process.cwd(), resizedUrl);
-          if (fs.existsSync(resizedPath)) {
-            fs.unlinkSync(resizedPath);
-          }
-        });
-      } catch (cleanupError) {
-        console.error('Error during cleanup:', cleanupError);
-      }
-      
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-      res.status(500).json({
-        success: false,
-        error: errorMessage
+      console.error('Error processing images:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to process images' 
       });
     }
   });

@@ -216,10 +216,16 @@ export async function generateVideo(
       
       // Add Ken Burns effect if enabled
       if (options.kenBurnsEnabled !== false) {
-        // Apply zoompan with proper syntax for zoom
-        filter += `,zoompan=z='min(zoom+0.0005,1.1)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${duration + transitionDuration * 2}:s=1920x1080:fps=30`;
-        // Add smooth rotation per image while maintaining dimensions
-        filter += `,rotate='min((t-${i * (duration + transitionDuration)})*0.1,0.05)':c=black@0:ow=1920:oh=1080`;
+        // Generate random speeds for this image
+        const zoomSpeed = 0.0003 + Math.random() * 0.0004; // Random speed between 0.0003 and 0.0007
+        const maxZoom = 1.05 + Math.random() * 0.05; // Random max zoom between 1.05 and 1.1
+        const rotationSpeed = 0.05 + Math.random() * 0.1; // Random speed between 0.05 and 0.15
+        const maxRotation = 0.02 + Math.random() * 0.03; // Random max rotation between 0.02 and 0.05
+
+        // Apply zoompan with random speed
+        filter += `,zoompan=z='min(zoom+${zoomSpeed},${maxZoom})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${duration + transitionDuration * 2}:s=1920x1080:fps=30`;
+        // Add smooth rotation with random speed
+        filter += `,rotate='min((t-${i * (duration + transitionDuration)})*${rotationSpeed},${maxRotation})':c=black@0:ow=1920:oh=1080`;
       }
       
       // Add text overlay if enabled

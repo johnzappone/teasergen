@@ -14,7 +14,7 @@
                     <div class="flex items-center space-x-4">
                       <input
                         type="file"
-                        accept=".jpg,.jpeg"
+                        accept=".jpg,.jpeg,.png"
                         @change="handleFileChange($event, index)"
                         class="block w-full text-sm text-gray-500
                           file:mr-4 file:py-2 file:px-4
